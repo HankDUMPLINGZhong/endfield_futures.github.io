@@ -13,3 +13,6 @@ dependencies = [
     "loguru>=0.7.3",
     "uvicorn[standard]>=0.27",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
