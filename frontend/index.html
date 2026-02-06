@@ -741,7 +741,10 @@
 <div id="tutorialSpot" class="tutorialSpot" style="display:none"></div>
 <script>
   // ========== Backend-driven Frontend ==========
-  const API_BASE = "http://127.0.0.1:5000";
+  const API_BASE =
+  (location.hostname === "127.0.0.1" || location.hostname === "localhost")
+    ? "http://127.0.0.1:5000"
+    : "";
   console.log("API_BASE =", API_BASE);
   const CONTRACT_MONTHS = ["2603","2604","2606"];
 
