@@ -551,6 +551,16 @@
   body{
     padding-bottom: 80px;
   }
+
+  .noScrollbar{
+    overflow: auto;              /* 仍然可滚动 */
+    scrollbar-width: none;       /* Firefox */
+    -ms-overflow-style: none;    /* IE/旧 Edge */
+  }
+  .noScrollbar::-webkit-scrollbar{
+    width: 0;                    /* Chrome/Safari */
+    height: 0;
+  }
   </style>
 </head>
 <body>
@@ -564,7 +574,7 @@
       <button class="btn primary" id="btnNextTick" style="padding:8px 10px;font-size:12px">下一 Tick</button>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
-      <button class="btn" id="btnReset">败者食尘</button>
+      <button class="btn" id="btnReset">空中飞人（重开）</button>
       <span class="pill">行情：随机跳价（手动 Tick）</span>
       <span class="pill">模式：现金结算</span>
     </div>
@@ -577,7 +587,7 @@
         <div class="panelTitle">合约导航</div>
         <span class="pill" id="leftHint">12 品种</span>
       </div>
-      <div class="panelBody">
+      <div class="panelBody noScrollbar">
         <input class="search" id="search" placeholder="搜索：中文名 / 代码（如 AKT）" />
         <div class="list" id="productList"></div>
       </div>
@@ -1545,7 +1555,7 @@
   };
 
   el("btnReset").onclick = async () => {
-    const ok = confirm("确定要重置吗？\n\n将清空：持仓/委托/成交/公告，并让行情回到初始。");
+    const ok = confirm("确定要空中飞人吗？\n\n将清空：持仓/委托/成交/公告。\n\n投资有风险，决策需谨慎！");
     if(!ok) return;
 
     try{

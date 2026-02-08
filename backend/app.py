@@ -8,6 +8,10 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from backend.engine.state import GameState
 from fastapi.middleware.cors import CORSMiddleware
+import json
+import secrets
+from fastapi import Request, Response
+from backend.persist import init_db, load_state_json, save_state_json, delete_session
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -26,7 +30,28 @@ app.add_middleware(
 )
 app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="assets")
 
-state = GameState(frontend_dir=FRONTEND_DIR)
+init_db()
+def _get_session_id(req: Request, resp: Response) -> str:
+    sid = req.cookies.get("session_id")
+    if sid and isinstance(sid, str) and len(sid) >= 16:
+        return sid
+    sid = secrets.token_urlsafe(24)
+    # 同站 cookie；线上 https 建议加 secure=True（Render 上通常是 https）
+    resp.set_cookie("session_id", sid, httponly=True, samesite="lax")
+    return sid
+
+
+def _load_state(session_id: str) -> GameState:
+    raw = load_state_json(session_id)
+    if raw:
+        d = json.loads(raw)
+        return GameState.from_dict(d, frontend_dir=FRONTEND_DIR)
+    # 新 session：新开一局（保留你的随机 specs）
+    return GameState(frontend_dir=FRONTEND_DIR)
+
+
+def _save_state(session_id: str, gs: GameState) -> None:
+    save_state_json(session_id, json.dumps(gs.to_dict(), ensure_ascii=False))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -35,80 +60,64 @@ def index() -> str:
 
 
 @app.get("/api/bootstrap")
-def bootstrap() -> dict:
-    return state.bootstrap_payload()
-
+def bootstrap(req: Request, resp: Response) -> dict:
+    sid = _get_session_id(req, resp)
+    gs = _load_state(sid)
+    _save_state(sid, gs)  # 保险：第一次 bootstrap 时也落盘
+    return gs.bootstrap_payload()
 
 @app.get("/api/state")
-def get_state() -> dict:
-    return state.state_payload()
-
-@app.post("/api/reset_player")
-def reset_player() -> dict:
-    state.reset_player()
-    return {"ok": True}
-
-
-@app.post("/api/reset_market")
-def reset_market() -> dict:
-    state.reset_market()
-    return {"ok": True}
+def get_state(req: Request, resp: Response) -> dict:
+    sid = _get_session_id(req, resp)
+    gs = _load_state(sid)
+    return gs.state_payload()
 
 @app.post("/api/tick")
-def tick() -> dict:
-    state.advance_tick()
+def tick(req: Request, resp: Response) -> dict:
+    sid = _get_session_id(req, resp)
+    gs = _load_state(sid)
+    gs.advance_tick()
+    _save_state(sid, gs)
     return {"ok": True}
 
 @app.post("/api/reset_all")
-def reset_all() -> dict:
-    global state
-    state = GameState(frontend_dir=FRONTEND_DIR)
+def reset_all(req: Request, resp: Response) -> dict:
+    sid = _get_session_id(req, resp)
+    delete_session(sid)  # 直接删档，下次 load 会生成新局
     return {"ok": True}
 
 @app.post("/api/orders")
-def place_order(payload: dict) -> dict:
-    return state.place_order(payload)
+def place_order(payload: dict, req: Request, resp: Response) -> dict:
+    sid = _get_session_id(req, resp)
+    gs = _load_state(sid)
+    out = gs.place_order(payload)
+    _save_state(sid, gs)
+    return out
+
 
 
 @app.post("/api/cancel_all")
-def cancel_all() -> dict:
-    state.cancel_all()
+def cancel_all(req: Request, resp: Response) -> dict:
+    sid = _get_session_id(req, resp)
+    gs = _load_state(sid)
+
+    gs.cancel_all()
+
+    _save_state(sid, gs)
     return {"ok": True}
 
 
 @app.post("/api/close")
-def close_position(payload: dict) -> dict:
-    state.close_position(payload)
+def close_position(payload: dict, req: Request, resp: Response) -> dict:
+    sid = _get_session_id(req, resp)
+    gs = _load_state(sid)
+
+    gs.close_position(payload)
+
+    _save_state(sid, gs)
     return {"ok": True}
 
-
+'''
 @app.websocket("/ws")
-async def ws_endpoint(ws: WebSocket) -> None:
-    await ws.accept()
-    client_id = state.ws_register(ws)
-    logger.info("ws connected: {}", client_id)
-    try:
-        await ws.send_json({"type": "bootstrap", "data": state.bootstrap_payload()})
-        await ws.send_json({"type": "state", "data": state.state_payload()})
-        while True:
-            msg = await ws.receive_json()
-            # Minimal protocol: client can request tick / place order / cancel
-            mtype = msg.get("type")
-            data = msg.get("data", {})
-            if mtype == "tick":
-                state.advance_tick()
-                await state.ws_broadcast_state()
-            elif mtype == "order":
-                state.place_order(data)
-                await state.ws_broadcast_state()
-            elif mtype == "cancel_all":
-                state.cancel_all()
-                await state.ws_broadcast_state()
-            elif mtype == "close":
-                state.close_position(data)
-                await state.ws_broadcast_state()
-            else:
-                await ws.send_json({"type": "error", "message": "unknown message type"})
-    finally:
-        state.ws_unregister(client_id)
-        logger.info("ws disconnected: {}", client_id)
+    #TODO:websocket
+'''
