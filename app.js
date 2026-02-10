@@ -42,6 +42,8 @@ async function initPy(){
 
     // 写入 engine 源码到 Pyodide FS
     pyodide.FS.mkdirTree("/engine");
+    pyodide.FS.writeFile("/engine/__init__.py", "");
+
     const files = [ "models.py", "matching.py", "market.py", "state.py"];
     for(const f of files){
       const res = await fetch(`py/engine/${f}`);
