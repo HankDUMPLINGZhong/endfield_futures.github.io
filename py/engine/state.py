@@ -1,22 +1,22 @@
 from __future__ import annotations
-
+import math
 import random
-from pathlib import Path
 from time import strftime
 
-from fastapi import WebSocket
-from loguru import logger
-
-from backend.engine.market import advance_market_tick, init_market, round_to, clamp, now_str
-from backend.engine.matching import is_marketable, fee_for
-from backend.engine.models import Spec, Market, Position, Order, Trade
-from backend.engine.market import roll_market_day
+from engine.market import advance_market_tick, init_market, round_to, clamp, now_str
+from engine.matching import is_marketable, fee_for
+from engine.models import Spec, Market, Position, Order, Trade
+from engine.market import roll_market_day
 from dataclasses import asdict
 import json
 
+def _json_num(x):
+    if isinstance(x, float) and (math.isinf(x) or math.isnan(x)):
+        return 0.0
+    return x
+
 class GameState:
-    def __init__(self, frontend_dir: Path) -> None:
-        self.frontend_dir = frontend_dir
+    def __init__(self) -> None:
         self.contract_months = ["2603", "2604", "2606"]
 
         self.products = [
@@ -71,7 +71,6 @@ class GameState:
         self.round_log: list[dict] = []
 
         self._order_id = 1000
-        self.ws_clients: dict[str, WebSocket] = {}
         self.day_klines: dict[str, list[dict]] = {}
         for sym in self.market.keys():
             self.day_klines[sym] = []
@@ -98,12 +97,12 @@ class GameState:
         products = []
         for p in self.products:
             code = p["code"]
-            asset = self.frontend_dir / "assets" / f"{code}.png"
+            asset = f"assets/{code}.png"
             products.append(
                 {
                     "code": code,
                     "name": p["name"],
-                    "asset_file": f"/assets/{code}.png" if asset.exists() else None,
+                    "asset_file": f"assets/{code}.png",
                     "main_contract": self._main_contract(code),
                 }
             )
@@ -184,7 +183,7 @@ class GameState:
 
     def _account_payload(self) -> dict:
         acc = self._account_payload_base()
-        ratio = self._compute_margin_ratio(acc["equity"], acc["margin_used"])
+        ratio = self._compute_risk_ratio(acc["equity"], acc["margin_used"])
         acc["margin_ratio"] = ratio
         acc["risk_state"] = self.risk_state
         acc["risk_msg"] = self.risk_msg
@@ -338,14 +337,14 @@ class GameState:
 
 
     # --------- Risk control ----------
-    def _compute_margin_ratio(self, equity: float, margin_used: float) -> float:
+    def _compute_risk_ratio(self, equity: float, margin_used: float) -> float:
         if margin_used <= 0.0:
-            return float("inf")
+            return 0.0
         return equity / margin_used
 
     def _risk_update_only(self, reason: str) -> None:
         acc = self._account_payload_base()
-        ratio = self._compute_margin_ratio(acc["equity"], acc["margin_used"])
+        ratio = self._compute_risk_ratio(acc["equity"], acc["margin_used"])
         prev = self.risk_state
 
         if ratio >= self.warn_ratio:
@@ -386,7 +385,7 @@ class GameState:
 
         while steps < max_steps and self.positions:
             acc = self._account_payload_base()
-            ratio = self._compute_margin_ratio(acc["equity"], acc["margin_used"])
+            ratio = self._compute_risk_ratio(acc["equity"], acc["margin_used"])
             if ratio >= target:
                 break
 
@@ -525,21 +524,6 @@ class GameState:
         if len(self.round_log) > 80:
             self.round_log.pop(0)
 
-    # --------- WebSocket helpers ----------
-    def ws_register(self, ws: WebSocket) -> str:
-        cid = f"c{len(self.ws_clients)+1}"
-        self.ws_clients[cid] = ws
-        return cid
-
-    def ws_unregister(self, client_id: str) -> None:
-        if client_id in self.ws_clients:
-            del self.ws_clients[client_id]
-
-    async def ws_broadcast_state(self) -> None:
-        payload = {"type": "state", "data": self.state_payload()}
-        for cid, ws in list(self.ws_clients.items()):
-            await ws.send_json(payload)
-    
     def to_dict(self) -> dict:
         # 注意：frontend_dir / ws_clients 不入库
         return {
@@ -567,8 +551,8 @@ class GameState:
         }
 
     @classmethod
-    def from_dict(cls, d: dict, frontend_dir: Path) -> "GameState":
-        s = cls(frontend_dir=frontend_dir)
+    def from_dict(cls, d: dict) -> "GameState":
+        s = cls()
 
         # 覆盖随机初始化的内容
         s.contract_months = list(d.get("contract_months", s.contract_months))

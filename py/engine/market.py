@@ -1,9 +1,8 @@
 from __future__ import annotations
-import math
 import random
 from time import strftime
 
-from backend.engine.models import Market, Spec
+from engine.models import Market, Spec
 
 def _sign(x: float) -> int:
     return 1 if x > 0 else -1 if x < 0 else 0

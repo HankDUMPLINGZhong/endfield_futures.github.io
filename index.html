@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>武陵期货交易所</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <span style="display:inline-flex;width:10px;height:10px;border-radius:999px;background:rgba(255,204,102,.85);box-shadow:0 0 0 6px rgba(255,204,102,.12)"></span>
+      <span>武陵期货交易所（测试版）</span>
+      <span class="pill" id="clock">--:--:--</span>
+      <span class="pill" id="tradingDay">T+0</span>
+      <button class="btn primary" id="btnNextTick" style="padding:8px 10px;font-size:12px">下一 Tick</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" id="btnReset">空中飞人（重开）</button>
+      <span class="pill">行情：随机跳价（手动 Tick）</span>
+      <span class="pill">模式：现金结算</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Left -->
+    <div class="panel" id="leftPanel">
+      <div class="panelHeader">
+        <div class="panelTitle">合约导航</div>
+        <span class="pill" id="leftHint">12 品种</span>
+      </div>
+      <div class="panelBody noScrollbar">
+        <input class="search" id="search" placeholder="搜索：中文名 / 代码（如 AKT）" />
+        <div class="list" id="productList"></div>
+      </div>
+    </div>
+
+    <!-- Middle -->
+    <div class="panel" id="midPanel">
+      <div class="midTop">
+        <div class="instrumentRow">
+          <div class="instLeft">
+            <div class="statusDot" title="交易中"></div>
+            <div style="min-width:0">
+              <div class="instName" id="instName">--</div>
+              <div class="muted" style="font-family:var(--mono);font-size:12px;margin-top:2px" id="instMeta">--</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div class="pill" id="limitText">涨跌停：--</div>
+          </div>
+        </div>
+        <div class="band" title="涨跌停范围">
+          <div class="marker" id="bandMarker" style="left:50%"></div>
+        </div>
+      </div>
+
+      <div class="bigPrice">
+        <div>
+          <div class="big" id="lastPrice">--</div>
+          <div class="bigSub">
+            <span id="chgAbs" class="muted">--</span>
+            <span id="chgPct" class="muted">--</span>
+            <span class="pill" id="settleTag">昨结 --</span>
+          </div>
+        </div>
+        <div class="kv" style="min-width:240px">
+          <div>今开 <b id="openPx">--</b></div>
+          <div>最高 <b id="highPx">--</b></div>
+          <div>最低 <b id="lowPx">--</b></div>
+          <div>成交 <b id="vol">--</b></div>
+          <div>持仓 <b id="oi">--</b></div>
+          <div>Tick <b id="tick">--</b></div>
+        </div>
+      </div>
+
+      <div class="chartWrap">
+        <div class="chartTabs" id="chartTabs">
+          <button class="pill active" id="tabTick">Tick</button>
+          <button class="pill" id="tabDay">日K</button>
+          <button class="pill" id="btnAutoScale">自动缩放：开</button>
+        </div>
+        <canvas id="chart" width="1100" height="360"></canvas>
+        <div class="hint" id="chartHint">
+          图表：简化分时折线（后续可替换为 K 线 / 真实撮合）。当前价格被限制在涨跌停范围内；现在通过按钮手动推进 Tick。
+        </div>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div class="panel" id="rightPanel">
+      <div class="panelHeader">
+        <div class="panelTitle">交易操作</div>
+        <span class="pill" id="riskPill">风险度 --%</span>
+      </div>
+      <div class="panelBody" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="seg">
+          <button class="btn ok" id="btnOpenLong">开多</button>
+          <button class="btn danger" id="btnOpenShort">开空</button>
+          <button class="btn" id="btnCloseLong">平多</button>
+          <button class="btn" id="btnCloseShort">平空</button>
+        </div>
+
+        <div class="row">
+          <div class="field" style="flex:1">
+            <label>限价</label>
+            <input id="priceInput" inputmode="decimal" />
+          </div>
+          <div class="field" style="width:140px">
+            <label>手数</label>
+            <input id="qtyInput" inputmode="numeric" value="1" />
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="btn primary" style="flex:1" id="btnSubmit">提交委托</button>
+          <button class="btn" id="btnCancelAll">撤全部</button>
+        </div>
+
+        <div class="hint" id="orderHint">--</div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="orders">委托</div>
+        <div class="tab" data-tab="trades">成交</div>
+        <div class="tab" data-tab="news">公告</div>
+      </div>
+      <div class="panelBody" id="tabBody" style="padding-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- Bottom Drawer -->
+  <div class="bottomDrawer" id="bottomDrawer">
+    <div class="drawerTab" id="drawerTab">
+      <div class="drawerTitle">
+        <span class="dot"></span>
+        账户与持仓
+        <span class="drawerSub" id="drawerSub">（点击展开）</span>
+      </div>
+      <button class="drawerBtn" id="drawerToggle" type="button">展开</button>
+    </div>
+
+    <div class="drawerBody" id="drawerBody">
+      <div class="bottom">
+        <div class="accountCard">
+          <div class="acctTop">
+            <div class="h">账户概览</div>
+            <span class="pill" id="acctMode">调度券</span>
+          </div>
+          <div class="kv" style="text-align:left;grid-template-columns: 1fr 1fr;">
+            <div>权益 <b id="equity">--</b></div>
+            <div>可用 <b id="avail">--</b></div>
+            <div>保证金 <b id="marginUsed">--</b></div>
+            <div>浮盈亏 <b id="uPnl">--</b></div>
+            <div>已实现 <b id="rPnl">--</b></div>
+            <div>手续费 <b id="fees">--</b></div>
+          </div>
+          <div>
+            <div class="muted" style="font-family:var(--mono);font-size:12px;margin-bottom:6px">风险度（占用保证金 / 权益）</div>
+            <div class="bar"><div id="riskBar"></div></div>
+          </div>
+          <div class="small" id="acctNote">规则：每日结算（此 Demo 省略日结；只演示下单/持仓/保证金变化与涨跌停限制）。</div>
+        </div>
+
+        <div class="panel" style="box-shadow:none;background:transparent;border:none;backdrop-filter:none;">
+          <div class="panel" style="height:100%;">
+            <div class="panelHeader">
+              <div class="panelTitle">持仓</div>
+              <span class="pill" id="posHint">--</span>
+            </div>
+            <div class="panelBody" id="positions"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ===== 新手教程层 ===== -->
+<div id="tutorialOverlay">
+  <div class="tutorialShade" id="shadeTop"></div>
+  <div class="tutorialShade" id="shadeLeft"></div>
+  <div class="tutorialShade" id="shadeRight"></div>
+  <div class="tutorialShade" id="shadeBottom"></div>
+</div>
+<div id="tutorialBubble" style="display:none"></div>
+<div id="tutorialSpot" class="tutorialSpot" style="display:none"></div>
+
+<!-- Pyodide runtime 必须在 app.js 之前 -->
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+<script src="app.js" defer></script>
+</body>
+</html>
